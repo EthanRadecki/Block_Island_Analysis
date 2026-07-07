@@ -95,6 +95,7 @@ svg{max-width:100%;height:auto;display:block;}
 .legrow-fill{height:100%;width:0%;border-radius:6px;transition:width 1s cubic-bezier(.16,1,.3,1);display:flex;align-items:center;padding-left:10px;}
 .legrow-fill span{font-family:var(--font-mono);font-size:11px;color:#fff;font-weight:600;white-space:nowrap;}
 .legrow-time{width:76px;text-align:right;font-family:var(--font-mono);font-size:13px;color:var(--muted);flex-shrink:0;}
+.rb-meta{margin-top:12px;font-family:var(--font-mono);font-size:11px;color:var(--faint);}
 
 /* ---------- Impact bars (regression) ---------- */
 .impact-row{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
@@ -246,9 +247,18 @@ footer p{font-size:12px;color:var(--faint);max-width:640px;line-height:1.6;}
   </section>
 
   <section id="racebar">
-    <div class="section-head"><h2>Where time is spent</h2><p class="note">Average share of total finish time, all results.</p></div>
+    <div class="section-head">
+      <h2>Where the clock goes</h2>
+      <p class="note">Average share of total finish time — how long each leg takes, not how much it affects your place (that's the next-but-one section below). Filter to see how the split shifts by year, age, or gender.</p>
+    </div>
+    <div class="explorer-controls" style="margin-bottom:14px;">
+      <select id="rb-year-filter"><option value="">All years</option></select>
+      <select id="rb-age-filter"><option value="">All ages</option></select>
+      <select id="rb-sex-filter"><option value="">Everyone</option><option value="M">Men</option><option value="F">Women</option></select>
+    </div>
     <div class="card">
-      <div class="legrows" id="racebar"></div>
+      <div class="legrows" id="racebar-rows"></div>
+      <p class="rb-meta" id="rb-meta"></p>
     </div>
   </section>
 
@@ -263,7 +273,7 @@ footer p{font-size:12px;color:var(--faint);max-width:640px;line-height:1.6;}
   </section>
 
   <section id="impact">
-    <div class="section-head"><h2>What actually determines your place</h2><p class="note">Each leg's share of the total variation in finish time across every racer. A leg only moves your place if people's times on it actually differ from each other — even though the bike leg takes the longest, it's <em>how much bike times vary</em> that makes it matter most.</p></div>
+    <div class="section-head"><h2>What actually determines your place</h2><p class="note">A different question than the time breakdown above. That one showed how long each leg takes; this shows how much each leg actually separates racers from each other. A leg only moves your place if people's times on it differ meaningfully — bike takes the most clock time but varies the <em>least</em> between racers, while run takes less time overall but varies the <em>most</em>, which is why run has the bigger effect on where you finish.</p></div>
     <div class="card">
       <div id="impact-bars"></div>
       <p class="r2-note" id="r2-note"></p>
@@ -484,9 +494,9 @@ function fmtTime(sec){
     `Since the field's overall fitness would be expected to move every leg by a similar amount, the fact that bike stays nearly flat while swim and run swing widely points to the course itself — not the racers — as the main reason some years read faster than others.`;
 })();
 
-/* ---------------- LEG TIME BREAKDOWN ---------------- */
+/* ---------------- LEG TIME BREAKDOWN (filterable) ---------------- */
 (function(){
-  const p = DATA.overall_pace;
+  const rows = DATA.explorer;
   const legs = [
     {key:'SwimSec', label:'Swim', color:COLORS.teal},
     {key:'T1Sec', label:'T1', color:COLORS.faint},
@@ -494,18 +504,52 @@ function fmtTime(sec){
     {key:'T2Sec', label:'T2', color:COLORS.faint},
     {key:'RunSec', label:'Run', color:COLORS.brick},
   ];
-  const total = legs.reduce((a,l)=>a+p[l.key],0);
-  document.getElementById('racebar').innerHTML = legs.map(l=>{
-    const pct = 100*p[l.key]/total;
-    return `<div class="legrow">
-      <div class="legrow-label">${l.label}</div>
-      <div class="legrow-track"><div class="legrow-fill" data-pct="${pct}" style="background:${l.color}"><span>${Math.round(pct)}% of race</span></div></div>
-      <div class="legrow-time">${fmtTime(p[l.key])}</div>
-    </div>`;
-  }).join('');
-  requestAnimationFrame(()=>setTimeout(()=>{
-    document.querySelectorAll('.legrow-fill').forEach(f=>{ f.style.width = f.dataset.pct + '%'; });
-  },100));
+  function ageGroup(a){
+    if(a<20) return '0-19'; if(a<25) return '20-24'; if(a<30) return '25-29'; if(a<35) return '30-34';
+    if(a<40) return '35-39'; if(a<45) return '40-44'; if(a<50) return '45-49'; if(a<55) return '50-54';
+    if(a<60) return '55-59'; if(a<65) return '60-64'; if(a<70) return '65-69'; return '70+';
+  }
+  const ageOrder = ['0-19','20-24','25-29','30-34','35-39','40-44','45-49','50-54','55-59','60-64','65-69','70+'];
+
+  const yearSel = document.getElementById('rb-year-filter');
+  [...new Set(rows.map(r=>r.Year))].sort((a,b)=>b-a).forEach(y=>{
+    const o=document.createElement('option'); o.value=y; o.textContent=y; yearSel.appendChild(o);
+  });
+  const ageSel = document.getElementById('rb-age-filter');
+  ageOrder.forEach(g=>{ const o=document.createElement('option'); o.value=g; o.textContent=g; ageSel.appendChild(o); });
+  const sexSel = document.getElementById('rb-sex-filter');
+
+  function render(){
+    const y = yearSel.value, ag = ageSel.value, sx = sexSel.value;
+    const filtered = rows.filter(r=>{
+      if(y && String(r.Year)!==y) return false;
+      if(ag && ageGroup(r.Age)!==ag) return false;
+      if(sx && r.Sex!==sx) return false;
+      return true;
+    });
+    if(filtered.length===0){
+      document.getElementById('racebar-rows').innerHTML = '';
+      document.getElementById('rb-meta').textContent = 'No results match that combination.';
+      return;
+    }
+    const avg = {};
+    legs.forEach(l=>{ avg[l.key] = filtered.reduce((s,r)=>s+r[l.key],0)/filtered.length; });
+    const total = legs.reduce((a,l)=>a+avg[l.key],0);
+    document.getElementById('racebar-rows').innerHTML = legs.map(l=>{
+      const pct = 100*avg[l.key]/total;
+      return `<div class="legrow">
+        <div class="legrow-label">${l.label}</div>
+        <div class="legrow-track"><div class="legrow-fill" data-pct="${pct}" style="background:${l.color}"><span>${Math.round(pct)}% of race</span></div></div>
+        <div class="legrow-time">${fmtTime(avg[l.key])}</div>
+      </div>`;
+    }).join('');
+    requestAnimationFrame(()=>setTimeout(()=>{
+      document.querySelectorAll('#racebar-rows .legrow-fill').forEach(f=>{ f.style.width = f.dataset.pct + '%'; });
+    },50));
+    document.getElementById('rb-meta').textContent = `Based on ${filtered.length.toLocaleString()} result${filtered.length===1?'':'s'}`;
+  }
+  [yearSel, ageSel, sexSel].forEach(el=>el.addEventListener('change', render));
+  render();
 })();
 
 /* ---------------- AGE GROUP CHART ---------------- */
