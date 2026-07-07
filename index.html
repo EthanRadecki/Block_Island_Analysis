@@ -13,7 +13,7 @@
   --line:#DCD3BC;
   --ink:#1E2B2E;
   --muted:#5C6B67;
-  --faint:#8B9490;
+  --faint:#686F6C;
   --teal:#1F6F63;
   --teal-soft:#DCEBE6;
   --brick:#B1502F;
@@ -184,15 +184,19 @@ table.results tbody tr:hover td{background:var(--teal-soft);}
 
 @media (max-width:680px){
   table.results thead{display:none;}
-  table.results, table.results tbody, table.results tr, table.results td{display:block;width:100%;}
+  table.results, table.results tbody, table.results tr, table.results td,
+  .records-table, .records-table tbody, .records-table tr, .records-table td,
+  .racer-table, .racer-table tbody, .racer-table tr, .racer-table td{display:block;width:100%;}
   .table-scroll{overflow-x:hidden;}
-  table.results tr{border-top:1px solid var(--line);padding:12px 14px;}
-  table.results tr:first-child{border-top:none;}
-  table.results td{border-top:none;padding:3px 0;white-space:normal;display:flex;justify-content:space-between;gap:10px;background:transparent !important;}
-  table.results td::before{content:attr(data-label);font-family:var(--font-mono);font-size:10px;color:var(--faint);text-transform:uppercase;flex-shrink:0;}
+  .records-table th, .racer-table th{display:none;}
+  table.results tr, .records-table tr, .racer-table tr{border-top:1px solid var(--line);padding:12px 14px;}
+  table.results tr:first-child, .records-table tr:first-child, .racer-table tr:first-child{border-top:none;}
+  table.results td, .records-table td, .racer-table td{border-top:none;padding:3px 0;white-space:normal;display:flex;justify-content:space-between;gap:10px;background:transparent !important;align-items:flex-start;}
+  table.results td::before, .records-table td::before, .racer-table td::before{content:attr(data-label);font-family:var(--font-mono);font-size:10px;color:var(--faint);text-transform:uppercase;flex-shrink:0;}
   table.results td.mc-name{font-weight:600;font-size:15px;}
   table.results td.mc-name::before{content:'';}
-  table.results td.mc-time{font-family:var(--font-mono);font-size:15px;color:var(--teal);font-weight:600;}
+  table.results td.mc-time, .racer-table td.mc-time{font-family:var(--font-mono);font-size:15px;color:var(--teal);font-weight:600;}
+  .racer-table td[data-label="Swim/Bike/Run"] .mini-bar{width:120px;}
 }
 
 .pager{display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:13px;color:var(--muted);gap:10px;}
@@ -633,7 +637,13 @@ function fmtTime(sec){
   document.getElementById('crec-f-sub').textContent = `${bestF.F.name}, ${bestF.year}`;
   document.getElementById('records-year-table').innerHTML =
     `<tr><th>Year</th><th>Men's winner</th><th>Time</th><th>Women's winner</th><th>Time</th></tr>` +
-    recs.map(r=>`<tr><td class="mono">${r.year}</td><td>${r.M?r.M.name:'—'}</td><td class="mono">${r.M?r.M.time:'—'}</td><td>${r.F?r.F.name:'—'}</td><td class="mono">${r.F?r.F.time:'—'}</td></tr>`).join('');
+    recs.map(r=>`<tr>
+      <td class="mono" data-label="Year">${r.year}</td>
+      <td data-label="Men's winner">${r.M?r.M.name:'—'}</td>
+      <td class="mono" data-label="Men's Time">${r.M?r.M.time:'—'}</td>
+      <td data-label="Women's winner">${r.F?r.F.name:'—'}</td>
+      <td class="mono" data-label="Women's Time">${r.F?r.F.time:'—'}</td>
+    </tr>`).join('');
 })();
 
 /* ---------------- BUMP CHART ---------------- */
@@ -841,11 +851,11 @@ function fmtTime(sec){
       const total = r.SwimSec+r.T1Sec+r.BikeSec+r.T2Sec+r.RunSec;
       const sw = 100*r.SwimSec/total, bk=100*r.BikeSec/total, rn=100*r.RunSec/total, tt=100*(r.T1Sec+r.T2Sec)/total;
       return `<tr>
-        <td class="mono">${r.Year}</td>
-        <td class="mono">${r.OverallPlace}</td>
-        <td class="mono">${r.DivCode} (${r.DivPlace}/${r.DivTotal})</td>
-        <td class="mono">${r.FinishTimeStr}</td>
-        <td><div class="mini-bar">
+        <td class="mono" data-label="Year">${r.Year}</td>
+        <td class="mono" data-label="Place">${r.OverallPlace}</td>
+        <td class="mono" data-label="Division">${r.DivCode} (${r.DivPlace}/${r.DivTotal})</td>
+        <td class="mono mc-time" data-label="Finish">${r.FinishTimeStr}</td>
+        <td data-label="Swim/Bike/Run"><div class="mini-bar">
           <span style="width:${sw}%;background:${COLORS.teal}"></span>
           <span style="width:${bk}%;background:${COLORS.brass}"></span>
           <span style="width:${rn}%;background:${COLORS.brick}"></span>
