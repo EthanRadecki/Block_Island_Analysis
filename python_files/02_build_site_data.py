@@ -151,10 +151,13 @@ def build_meta(df):
 
 
 def build_agegroup_stats(df):
-    """'Average time by age group' bar chart + 'Average time by finishing
-    tier' chart. Tiers are percentile-of-that-year's-own-field, not raw
-    place, because field size ranged from 230 to 429 across seasons --
-    percentile keeps the comparison fair across years."""
+    """'Average time by age group' bar chart (the `agegroup` key -- still
+    live). The `pct_bucket`/`bucket_order` keys this function also returns
+    were the original 'Average time by finishing tier' bar chart, which has
+    since been replaced by the Top-N radar chart (see build_tier_by_year) --
+    they're legacy, kept only because nothing asked to remove them from the
+    payload, same as `overall_pace`/`perfect_attendance`/`top_fastest`/
+    `heatmap` below."""
     df = df.copy()
     df['AgeGroup'] = df['Age'].apply(age_group)
 
@@ -335,6 +338,70 @@ def build_age_pace_by_year(df):
     return out
 
 
+def build_tier_by_year(df):
+    """'Where the field actually separates' radar chart. For a chosen set of
+    finishing cutoffs (Top 5/10/15/20/25/30/40/50/60/75/100/125/150/175/200),
+    computes average swim/T1/bike/T2/run time for "the top N finishers of a
+    season" -- ranked within each year separately (not by raw place across a
+    combined ranking), which matters because it keeps a faster or slower
+    course-year from skewing who counts as "elite." Two optional, independent
+    filters, matching how the UI actually uses this:
+
+      - year: 'ALL' pools every season's top-N together (the default,
+        course/tide-fair view), or a specific year to see that one season
+        in isolation (no pooling needed, since it's already a single year).
+      - sex: 'ALL' ranks against the whole field; 'M'/'F' ranks only within
+        that gender.
+
+    There's no age-group dimension here (an earlier version of this chart
+    had one, but for small age/sex combinations the per-year population can
+    be smaller than the cutoff itself -- e.g. men 55-59 never exceeded 21
+    people in any single season, so "Top 25," "Top 100," and "Top 200" all
+    silently became identical, which was confusing rather than informative).
+    The site's own UI handles the milder version of this same edge case
+    (e.g. a single small-field year like 2021 for one gender) by detecting
+    when multiple cutoffs saturate to the same underlying group and saying
+    so explicitly, rather than presenting three overlapping shapes with no
+    explanation.
+    """
+    n_thresholds = [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100, 125, 150, 175, 200]
+    years = sorted(df['Year'].unique().tolist())
+
+    def compute_pooled(sub):
+        out = {}
+        for N in n_thresholds:
+            rows = [g.nsmallest(N, 'FinishSec') for _, g in sub.groupby('Year')]
+            pool = pd.concat(rows) if rows else sub.iloc[0:0]
+            if len(pool) == 0:
+                out[str(N)] = None
+                continue
+            avg = pool[LEGS].mean()
+            out[str(N)] = {'swim': round(avg.SwimSec, 1), 't1': round(avg.T1Sec, 1), 'bike': round(avg.BikeSec, 1),
+                           't2': round(avg.T2Sec, 1), 'run': round(avg.RunSec, 1), 'n': int(len(pool))}
+        return out
+
+    def compute_single_year(sub_year):
+        out = {}
+        for N in n_thresholds:
+            pool = sub_year.nsmallest(N, 'FinishSec')
+            if len(pool) == 0:
+                out[str(N)] = None
+                continue
+            avg = pool[LEGS].mean()
+            out[str(N)] = {'swim': round(avg.SwimSec, 1), 't1': round(avg.T1Sec, 1), 'bike': round(avg.BikeSec, 1),
+                           't2': round(avg.T2Sec, 1), 'run': round(avg.RunSec, 1), 'n': int(len(pool))}
+        return out
+
+    tier_by_year = {}
+    for sex_key, sex_filter in [('ALL', None), ('M', 'M'), ('F', 'F')]:
+        base = df if sex_filter is None else df[df.Sex == sex_filter]
+        tier_by_year.setdefault('ALL', {})[sex_key] = compute_pooled(base)
+        for y in years:
+            tier_by_year.setdefault(str(y), {})[sex_key] = compute_single_year(base[base.Year == y])
+
+    return tier_by_year, n_thresholds, years
+
+
 def build_named_racers(df):
     """'Featured racers' section -- full result history for a specific
     list of names."""
@@ -372,6 +439,7 @@ def main():
     print(f"Loaded {len(df)} rows from {INPUT_PATH}")
 
     heat_detail, heat_meta = build_heat_detail(df)
+    tier_by_year, tier_n_thresholds, tier_years = build_tier_by_year(df)
 
     payload = {
         'yearly': build_yearly(df),
@@ -393,6 +461,9 @@ def main():
         'age_pace_by_year': build_age_pace_by_year(df),
         'heat_detail': heat_detail,
         'heat_meta': heat_meta,
+        'tier_by_year': tier_by_year,
+        'tier_n_thresholds': tier_n_thresholds,
+        'tier_years': tier_years,
     }
 
     with open(OUTPUT_PATH, 'w') as f:
