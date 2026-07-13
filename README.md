@@ -59,9 +59,22 @@ is a variance decomposition rather than a naive regression). Look here
 first if you want to understand or change any specific chart's logic.
 
 Sections marked "legacy" in the code (`overall_pace`, `perfect_attendance`,
-`top_fastest`, `heatmap`) were used by earlier iterations of the site and
-are no longer rendered, but are still computed and included in the
-payload since removing them wasn't asked for.
+`top_fastest`, `heatmap`, and `agegroup_stats`'s `pct_bucket`/`bucket_order`)
+were used by earlier iterations of the site and are no longer rendered, but
+are still computed and included in the payload since removing them wasn't
+asked for.
+
+The most recently added section, `build_tier_by_year`, powers "Where the
+field actually separates" — a radar chart comparing Top 5/25/100/200
+finishers' swim/bike/run pace. It went through two earlier designs before
+landing here (first grouped by age+sex, then by age alone) because small
+age or sex subgroups have few enough people per season that a cutoff like
+"Top 100" can silently become identical to "Top 200" once the cutoff
+exceeds how many people even exist in a given season -- there just aren't
+100 people to choose from some years. The final version drops age entirely
+and offers year (optional) and gender (optional) as the only filters, and
+the site's own UI detects and explains it in the rarer case where a single
+small-field season + gender combination still hits that same edge case.
 
 ## 3. `03_update_html_data.py`
 
